@@ -1,7 +1,7 @@
 # AI-Powered Credit Risk Scoring
 
 This project demonstrates a complete credit risk modeling workflow using `application_train.csv` and the notebook `creditscore chnage.ipynb`.
-https://credit-prediction-u9ag77zwllykg7bo2sew6d.streamlit.app/
+
 ## Project Overview
 - Dataset: `application_train.csv`
 - Notebook: `creditscore chnage.ipynb`
@@ -121,8 +121,7 @@ streamlit run app.py
 4. Navigate to `http://localhost:8501` in your browser
 
 ## Running the Dashboard
-The Streamlit app will start on port 8501 and automatically open in your default browser. 
-Enter applicant details to get instant credit risk predictions.
+https://credit-prediction-u9ag77zwllykg7bo2sew6d.streamlit.app/
 
 ## Notes
 - The notebook is structured for reproducibility and clarity across data cleaning, model building, and evaluation.
