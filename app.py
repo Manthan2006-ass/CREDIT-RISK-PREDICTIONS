@@ -1,138 +1,136 @@
-import streamlit as st
+import os
+import matplotlib.pyplot as plt
 import pandas as pd
-import joblib
-import numpy as np
-import warnings
+import requests
+import streamlit as st
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
-# --- NEW: SUPPRESS VERSION & FEATURE WARNINGS ---
-from sklearn.exceptions import InconsistentVersionWarning
-warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
-warnings.filterwarnings("ignore", category=UserWarning)
+load_dotenv()
 
-# ---------------- PAGE CONFIG ----------------
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "3306")
+DB_NAME = os.getenv("DB_NAME", "credit_risk_db")
+
+MYSQL_DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
 st.set_page_config(
-    page_title="AI Credit Risk Dashboard",
-    layout="centered"
+    page_title="AI Credit Risk Assessment Dashboard",
+    layout="wide"
 )
 
-# ---------------- LOAD MODEL ----------------
-@st.cache_resource
-def load_model():
-    
-    return joblib.load("final_credit_scoring_model.pkl")
-
-model = load_model()
-
-# ---------------- HEADER ----------------
-st.title(" AI-Powered Credit Scoring Dashboard")
-st.caption("Instant AI-based Credit Risk Prediction")
+st.title("AI-Powered Credit Scoring Dashboard")
+st.caption("Decoupled Architecture: Streamlit UI → FastAPI Backend → MySQL Audit Log")
 
 st.divider()
 
-# ---------------- APPLICANT DETAILS ----------------
-st.subheader(" Applicant Assessment")
+try:
+    health_resp = requests.get(f"{API_URL}/health", timeout=2)
+    if health_resp.status_code != 200:
+        st.error("Backend health check failed.")
+except Exception:
+    st.warning("FastAPI service unreachable at http://127.0.0.1:8000")
 
-col1, col2 = st.columns(2)
+st.subheader("Applicant Information Input")
 
-# LEFT COLUMN
+col1, col2, col3 = st.columns(3)
+
 with col1:
-    income = st.number_input("Annual Income (₹)", min_value=1, value=600000)
-    annuity = st.number_input("Monthly EMI (₹)", min_value=1, value=30000)
-    age = st.slider("Age", 18, 70, 35)
-    ext_2 = st.slider("Credit Score (Repayment Trust)", 0.0, 1.0, 0.5, help="Higher value means better repayment history")
+    income = st.number_input("Annual Income (₹)", min_value=1.0, value=600000.0, step=10000.0)
+    credit = st.number_input("Requested Loan Amount (₹)", min_value=1.0, value=1200000.0, step=20000.0)
+    annuity = st.number_input("Monthly EMI / Annuity (₹)", min_value=1.0, value=30000.0, step=1000.0)
+
+with col2:
+    age = st.slider("Age (Years)", 18, 70, 35)
+    emp_years = st.slider("Years Employed", 0, 45, 10)
+    goods_price = st.number_input("Goods Price (₹)", min_value=0.0, value=1000000.0, step=10000.0)
+
+with col3:
+    ext_2 = st.slider("External Score 2 (Repayment Trust)", 0.0, 1.0, 0.5)
+    ext_3 = st.slider("External Score 3 (Default Risk)", 0.0, 1.0, 0.5)
     education = st.selectbox(
-        "Education",
+        "Education Level",
         ["Higher education", "Secondary / secondary special", "Incomplete higher", "Lower secondary"]
     )
-
-# RIGHT COLUMN
-with col2:
-    credit = st.number_input("Loan Amount (₹)", min_value=1, value=1200000)
-    emp_years = st.slider("Years Employed", 0, 45, 10)
-    ext_3 = st.slider("Risk Score (Default Risk)", 0.0, 1.0, 0.5, help="Higher value means lower default risk")
     income_type = st.selectbox(
-        "Income Source ",
-        ["Working", "Commercial associate", "State servant", "Pensioner"]
+        "Income Source",
+        ["Working", "Commercial associate", "State servant", "Pensioner", "Unemployed"]
     )
 
 st.divider()
 
-# ---------------- INPUT DATA ----------------
-input_dict = {
-    "EXT_SOURCE_2": ext_2,
-    "EXT_SOURCE_3": ext_3,
-    "AMT_GOODS_PRICE": credit * 0.92,
-    "DAYS_BIRTH": -age * 365,
-    "DAYS_EMPLOYED": -emp_years * 365,
-    "AMT_CREDIT": credit,
-    "AMT_INCOME_TOTAL": income,
-    "AMT_ANNUITY": annuity,
-    "REGION_RATING_CLIENT": 2,
-    "FLAG_DOCUMENT_3": 1,
-    "DEF_30_CNT_SOCIAL_CIRCLE": 0,
-    "DEF_60_CNT_SOCIAL_CIRCLE": 0,
-    "REG_CITY_NOT_LIVE_CITY": 0,
-    "NAME_INCOME_TYPE": income_type,
-    "NAME_EDUCATION_TYPE": education,
-    "CODE_GENDER": "M",
-    "NAME_CONTRACT_TYPE": "Cash loans",
-    "FLAG_OWN_CAR": "N",
-    "NAME_FAMILY_STATUS": "Married",
-    "NAME_HOUSING_TYPE": "House / apartment",
-    "ORGANIZATION_TYPE": "Business Entity Type 3",
-    "OCCUPATION_TYPE": "Laborers"
-}
+if st.button(" Evaluate Credit Risk", use_container_width=True):
+    payload = {
+        "income": income,
+        "credit": credit,
+        "annuity": annuity,
+        "age": age,
+        "emp_years": emp_years,
+        "goods_price": goods_price,
+        "ext_2": ext_2,
+        "ext_3": ext_3,
+        "education": education,
+        "income_type": income_type
+    }
 
-# ---------------- FEATURE ENGINEERING ----------------
-input_dict['EXT_SOURCES_AVG'] = (ext_2 + ext_3 + 0.5) / 3
-input_dict['CREDIT_TERM'] = annuity / credit
-input_dict['DAYS_EMPLOYED_PERCENT'] = input_dict['DAYS_EMPLOYED'] / input_dict['DAYS_BIRTH']
-input_dict['CREDIT_INCOME_PERCENT'] = credit / income
-input_dict['ANNUITY_INCOME_PERCENT'] = annuity / income
+    with st.spinner("Processing evaluation..."):
+        try:
+            pred_response = requests.post(f"{API_URL}/predict", json=payload)
 
-# Convert to DataFrame
-input_df = pd.DataFrame([input_dict])
+            if pred_response.status_code == 422:
+                st.error("Validation Error: Invalid input parameters.")
+                st.json(pred_response.json())
+                st.stop()
+            elif pred_response.status_code != 200:
+                st.error(f"Server Error: {pred_response.text}")
+                st.stop()
 
-# ---------------- PREDICTION ----------------
-if st.button("Run Risk Assessment", use_container_width=True):
-    try:
-        # Validate critical inputs before prediction
-        if credit <= 0 or income <= 0 or annuity <= 0:
-            st.error("Income, loan amount, and annuity must all be greater than zero.")
-        else:
-            # --- New: FEATURE ALIGNMENT ---
-            # This fixes the "indices imply 109" error by ensuring 
-            # input_df has every column the model saw during training.
-            if hasattr(model, 'feature_names_in_'):
-                expected_features = model.feature_names_in_
-                # Fill missing columns with 0 and reorder them correctly
-                input_df = input_df.reindex(columns=expected_features, fill_value=0)
+            res_data = pred_response.json()
+            prob = res_data["probability"]
+            threshold = res_data["threshold"]
+            decision = res_data["decision"]
+            risk_level = res_data["risk_level"]
 
-            # Get prediction probability
-            prob = model.predict_proba(input_df)[0][1]
+            col_res1, col_res2, col_res3 = st.columns(3)
+            col_res1.metric("Predicted Default Probability", f"{prob * 100:.1f}%")
+            col_res2.metric("Approval Risk Threshold", f"{threshold * 100:.0f}%")
+            col_res3.metric("Decision Output", "REJECTED " if decision == "REJECTED" else "APPROVED ")
 
-            # 2. Display Results
-            threshold = 0.3
-            is_rejected = prob > threshold
+            st.progress(prob)
 
-            st.divider()
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Risk Probability", f"{prob*100:.1f}%")
-            col2.metric("Decision Threshold", f"{threshold*100:.0f}%")
-            col3.metric("Status", "REJECTED" if is_rejected else "APPROVED")
-
-            # ---------------- PROGRESS BAR ----------------
-            st.subheader("Risk Visualization")
-            st.progress(float(prob))
-
-            # ---------------- FINAL RESULT ----------------
-            if is_rejected:
-                st.error(f"Default risk exceeds the bank's safe threshold of {threshold*100:.0f}%.")
-                st.warning(" Very High Risk Applicant" if prob > 0.6 else "Moderate Risk Applicant")
+            if decision == "REJECTED":
+                st.error(f"Application Decision: REJECTED. Default risk ({prob*100:.1f}%) exceeds threshold ({threshold*100:.0f}%).")
+                st.warning(f"Risk Level: {risk_level}")
             else:
-                st.success(" Applicant falls within acceptable credit risk limits.")
-                st.success(" Low Risk Applicant")
+                st.success("Application Decision: APPROVED. Borrower parameters meet criteria.")
 
-    except Exception as e:
-        st.error(f"Prediction Error: {e}")
-        st.info("Ensure the column names in 'input_dict' match the CSV headers exactly.")
+            exp_response = requests.post(f"{API_URL}/explain", json=payload)
+            if exp_response.status_code == 200:
+                st.divider()
+                st.subheader(" Local SHAP Feature Contributions")
+
+                top_features = exp_response.json()["top_features"]
+                shap_df = pd.DataFrame(top_features)
+
+                fig, ax = plt.subplots(figsize=(8, 4))
+                colors = ['#e74c3c' if x > 0 else '#2ecc71' for x in shap_df['impact'][::-1]]
+                ax.barh(shap_df['feature'][::-1], shap_df['impact'][::-1], color=colors)
+                ax.set_xlabel("Impact on Default Score")
+                ax.set_title("Top 10 Feature Drivers")
+                st.pyplot(fig)
+
+        except requests.exceptions.ConnectionError:
+            st.error("Unable to connect to backend service.")
+
+st.divider()
+with st.expander("View Audit Log (MySQL Data)"):
+    try:
+        engine = create_engine(MYSQL_DATABASE_URL)
+        history_df = pd.read_sql_query("SELECT * FROM loan_predictions ORDER BY id DESC LIMIT 10", engine)
+        st.dataframe(history_df, use_container_width=True)
+    except Exception:
+        st.info("Unable to read history table from MySQL.")
